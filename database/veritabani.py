@@ -1,3 +1,6 @@
+import os
+import sys
+from pathlib import Path
 from sqlalchemy import create_engine, Column, Integer, String, ForeignKey, text
 from sqlalchemy.orm import declarative_base, relationship, sessionmaker
 
@@ -29,8 +32,6 @@ class Karakter(Base):
     rol_id = Column(Integer, ForeignKey('rol_tipleri.id'), nullable=False)
     cinsiyet_id = Column(Integer, ForeignKey('cinsiyet_tipleri.id'), nullable=False)
     sistem_istemi = Column(String, nullable=False)
-    
-    # YENİ EKLENEN ÖZELLİK: UZUN DÖNEM HAFIZA SÜTUNU
     uzun_donem_hafiza = Column(String, default="")
     
     rol = relationship("RolTipi", back_populates="karakterler")
@@ -56,12 +57,31 @@ class Mesaj(Base):
     tarih = Column(String, nullable=False)
     karakter = relationship("Karakter", back_populates="mesajlar")
 
-engine = create_engine('sqlite:///sohbet_hafizasi.db', echo=False)
+# --- YENİ: GÜVENLİ DİZİN (APPDATA) VE WAL MODU ---
+if sys.platform.startswith('win'):
+    app_data_path = Path(os.getenv('APPDATA')) / 'YapayZekaSohbetBotu'
+else:
+    app_data_path = Path.home() / '.yapayzekasohbetbotu'
+
+app_data_path.mkdir(parents=True, exist_ok=True)
+db_path = app_data_path / 'sohbet_hafizasi.db'
+
+engine = create_engine(
+    f'sqlite:///{db_path}', 
+    echo=False,
+    connect_args={
+        'check_same_thread': False, 
+        'isolation_level': None 
+    }
+)
+
+with engine.connect() as conn:
+    conn.execute(text('PRAGMA journal_mode=WAL;'))
+    conn.execute(text('PRAGMA synchronous=NORMAL;'))
+
 Session = sessionmaker(bind=engine)
 
 _VARSAYILAN_CINSIYETLER = ["Erkek", "Kadın", "Robot/Tarafsız"]
-
-# YENİ EKLENEN ÖZELLİK: DİĞER ROLÜ
 _VARSAYILAN_ROLLER = {
     "Arkadaş": "Kullanıcının yakın, samimi ve güvenilir bir arkadaşısın. Rahat, esprili ve destekleyici konuşursun.",
     "Sevgili": "Kullanıcının romantik partneri, sevgilisisin. Ona karşı sevgi dolu ve flörtöz bir üslupla konuşursun.",
@@ -70,7 +90,6 @@ _VARSAYILAN_ROLLER = {
     "Diğer / Belirtilmemiş": "Kullanıcı ile olan ilişkin özeldir. Sadece sistem istemindeki görev ve kurallara sıkı sıkıya bağlı kal."
 }
 
-# --- ESKİ KODDAKİ GÜVENLİK ÖNLEMLERİ (BİREBİR AYNI DURUYOR) ---
 def _lookup_tablolarini_tohumla(session):
     for isim in _VARSAYILAN_CINSIYETLER:
         if not session.query(CinsiyetTipi).filter_by(isim=isim).first():
@@ -124,9 +143,7 @@ def _eski_kullanici_semasini_tasi(conn, session):
             {"id": satir.id, "ad_soyad": satir.ad_soyad, "cinsiyet_id": cinsiyet_id_haritasi.get(satir.cinsiyet, vars_cin_id)})
     conn.commit()
 
-# --- YENİ EKLENEN GÜVENLİK ÖNLEMİ (HAFIZA İÇİN) ---
 def _yeni_hafiza_sutununu_ekle(conn):
-    """Eğer kullanıcı eski sürümden güncelliyorsa, hafıza sütununu otomatik ekler."""
     if _eski_semadan_veri_var_mi(conn, "karakterler", "uzun_donem_hafiza") is False:
         print("Hafıza sütunu otomatik ekleniyor...")
         conn.execute(text("ALTER TABLE karakterler ADD COLUMN uzun_donem_hafiza VARCHAR DEFAULT ''"))
@@ -134,18 +151,14 @@ def _yeni_hafiza_sutununu_ekle(conn):
 
 def veritabanini_kur():
     Base.metadata.create_all(engine)
-    session = Session()
-    try:
-        _lookup_tablolarini_tohumla(session)
-        with engine.connect() as conn:
-            _eski_karakterler_semasini_tasi(conn, session)
-            _eski_kullanici_semasini_tasi(conn, session)
-            _yeni_hafiza_sutununu_ekle(conn) # Yeni güvenlik ağımız burada çağrılıyor
-    finally: 
-        session.close()
-    print("Veritabanı hazır!")
+    with Session() as session:
+        try:
+            _lookup_tablolarini_tohumla(session)
+            with engine.connect() as conn:
+                _eski_karakterler_semasini_tasi(conn, session)
+                _eski_kullanici_semasini_tasi(conn, session)
+                _yeni_hafiza_sutununu_ekle(conn)
+        except Exception as e:
+            print(f"Veritabanı kurulum hatası: {e}")
 
 veritabanini_kur()
-
-if __name__ == "__main__": 
-    veritabanini_kur()
