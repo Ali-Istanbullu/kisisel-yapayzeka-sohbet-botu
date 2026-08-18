@@ -250,16 +250,7 @@ class AnaMenuEkrani(ctk.CTkFrame):
         self._durum_guncelle(hedef_karakter_id, taban_isim, " (Yazıyor...)")
         threading.Thread(target=self.bot_yaniti_bekle, args=(metin, hedef_karakter_id, taban_isim), daemon=True).start()
 
-    def _hafiza_kontrol_ve_ozetle(self, hedef_karakter_id):
-        mesajlar = mesaj_gecmisini_getir(hedef_karakter_id)
-        if len(mesajlar) > 20:
-            eski_mesajlar = mesajlar[:10]
-            yeni_mesajlar_metni = "\n".join([f"{m.gonderen}: {m.mesaj_metni}" for m in eski_mesajlar])
-            karakter = karakter_bilgisi_getir(hedef_karakter_id)
-            eski_hafiza = karakter.uzun_donem_hafiza or "Henüz bir geçmiş yok."
-            yeni_ozet = self.master.yz_motoru.hafiza_ozeti_olustur(eski_hafiza, yeni_mesajlar_metni)
-            hafiza_guncelle(hedef_karakter_id, yeni_ozet)
-            mesajlari_sil([m.id for m in eski_mesajlar])
+    
 
     def bot_yaniti_bekle(self, kullanici_mesaji, hedef_karakter_id, taban_isim):
         karakter = karakter_bilgisi_getir(hedef_karakter_id) 
@@ -280,7 +271,7 @@ class AnaMenuEkrani(ctk.CTkFrame):
                 siraya_girdi_callback=sira_bildir, uretim_basladi_callback=uretim_basladi
             )
             mesaj_ekle(hedef_karakter_id, "Bot", bot_cevabi)
-            threading.Thread(target=self._hafiza_kontrol_ve_ozetle, args=(hedef_karakter_id,), daemon=True).start()
+            threading.Thread(target=self.master.yz_motoru.dinamik_hafiza_kontrolu, args=(hedef_karakter_id,), daemon=True).start()
 
         except Exception as hata:
             bot_cevabi = "⚠️ Cevap üretilemedi, lütfen tekrar deneyin."
@@ -343,20 +334,26 @@ class AnaMenuEkrani(ctk.CTkFrame):
             if not kisi_adi:
                 whatsapp_durum_label.configure(text="Önce WhatsApp'taki adını yaz.", text_color="#ef697a")
                 return
+                
             dosya_yolu = filedialog.askopenfilename(title="WhatsApp .txt Dosyasını Seç", filetypes=[("Metin dosyası", "*.txt")])
             if not dosya_yolu: return
-            whatsapp_durum_label.configure(text="Analiz ediliyor...", text_color="gray")
+            
+            # Ekrana bekleme mesajını basıyoruz (Garson siparişi aldı)
+            whatsapp_durum_label.configure(text="Analiz ediliyor, lütfen bekleyin...", text_color="gray")
             self.popup.update_idletasks()
-            try:
-                mesajlar = whatsapp_disa_aktarimini_oku(dosya_yolu, kisi_adi)
-                if not mesajlar:
-                    whatsapp_durum_label.configure(text=f"'{kisi_adi}' bulunamadı.", text_color="#ef697a")
-                    return
-                uslup_ozeti, ornekler = uslup_profili_olustur(mesajlar)
-                bekleyen_whatsapp_verisi.update({"kisi_adi": kisi_adi, "uslup_ozeti": uslup_ozeti, "ornekler": ornekler})
-                whatsapp_durum_label.configure(text=f"✅ {len(mesajlar)} mesaj analiz edildi.", text_color=WA_YESIL_BUTON)
-            except Exception as hata:
-                whatsapp_durum_label.configure(text=f"Hata: {hata}", text_color="#ef697a")
+
+            # Mutfaktan Başarılı sonuç gelirse arayüzün yapacağı iş:
+            def analiz_basarili(kisi, ozet, ornek, mesaj_sayisi):
+                bekleyen_whatsapp_verisi.update({"kisi_adi": kisi, "uslup_ozeti": ozet, "ornekler": ornek})
+                self.popup.after(0, lambda: whatsapp_durum_label.configure(text=f"✅ {mesaj_sayisi} mesaj analiz edildi.", text_color=WA_YESIL_BUTON))
+
+            # Mutfakta Hata çıkarsa arayüzün yapacağı iş:
+            def analiz_hatali(hata_mesaji):
+                self.popup.after(0, lambda: whatsapp_durum_label.configure(text=f"Hata: {hata_mesaji}", text_color="#ef697a"))
+
+            # İşlemi mutfağa (backend'e) yolluyoruz
+            from backend.whatsapp_analiz import whatsapp_analizini_arkaplanda_baslat
+            whatsapp_analizini_arkaplanda_baslat(dosya_yolu, kisi_adi, analiz_basarili, analiz_hatali)
 
         ctk.CTkButton(self.popup, text="📄 .txt Analiz Et", width=320, height=30, fg_color=WA_PANEL, hover_color=WA_GIRDI_ALANI, text_color=WA_METIN, command=whatsapp_yukle).pack(pady=2)
         uyari_label = ctk.CTkLabel(self.popup, text="", text_color="#ef697a")

@@ -2,8 +2,37 @@ import os
 import threading
 from llama_cpp import Llama
 from ayarlar import ayarlari_oku
+from database.veritabani_islemleri import mesaj_gecmisini_getir, karakter_bilgisi_getir, hafiza_guncelle, mesajlari_sil
+
+     
 
 class YapayZekaMotoru:
+
+    def dinamik_hafiza_kontrolu(self, karakter_id):
+        # Hangi modelin yüklü olduğunu ayarlardan çekiyoruz
+        ayarlar = ayarlari_oku()
+        model_adi = ayarlar.get("model_dosya_adi", "").lower()
+
+        # Donanıma göre dinamik sınırları belirliyoruz
+        if "14b" in model_adi:
+            MAX_MESAJ_SINIRI, OZETLENECEK_SAYI = 80, 40
+        elif "7b" in model_adi:
+            MAX_MESAJ_SINIRI, OZETLENECEK_SAYI = 40, 20
+        else:
+            MAX_MESAJ_SINIRI, OZETLENECEK_SAYI = 20, 10
+
+        # Veritabanı ve özetleme işlemleri
+        mesajlar = mesaj_gecmisini_getir(karakter_id)
+        if len(mesajlar) > MAX_MESAJ_SINIRI:
+            eski_mesajlar = mesajlar[:OZETLENECEK_SAYI]
+            yeni_mesajlar_metni = "\n".join([f"{m.gonderen}: {m.mesaj_metni}" for m in eski_mesajlar])
+            karakter = karakter_bilgisi_getir(karakter_id)
+            eski_hafiza = karakter.uzun_donem_hafiza or "Henüz bir geçmiş yok."
+
+            yeni_ozet = self.hafiza_ozeti_olustur(eski_hafiza, yeni_mesajlar_metni)
+            hafiza_guncelle(karakter_id, yeni_ozet)
+            mesajlari_sil([m.id for m in eski_mesajlar])
+
     def __init__(self):
         print("Motor ısınıyor, lütfen bekle...")
         ayarlar = ayarlari_oku()

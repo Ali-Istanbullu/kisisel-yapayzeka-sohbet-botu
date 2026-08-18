@@ -1,7 +1,27 @@
 import re
+import threading
 
 _SATIR_DESENI = re.compile(r'^\[?(\d{1,2}[./]\d{1,2}[./]\d{2,4}),?\s+(\d{1,2}:\d{2}(?::\d{2})?)\s*(?:[AP]M)?\]?\s*[-–]?\s*([^:]+):\s?(.*)$')
 _SISTEM_ANAHTAR_KELIMELER = ("medya dahil edilmedi", "<media omitted>", "bu mesaj silindi", "güvenlik numarası değişti", "grup simgesini değiştirdi", "grubu oluşturdu")
+
+
+
+def whatsapp_analizini_arkaplanda_baslat(dosya_yolu, hedef_kisi_adi, basari_callback, hata_callback):
+    """Arayüzü kilitlemeden analiz yapar ve sonucu arayüze (callback ile) iletir."""
+    def gorev():
+        try:
+            mesajlar = whatsapp_disa_aktarimini_oku(dosya_yolu, hedef_kisi_adi)
+            if not mesajlar:
+                hata_callback(f"'{hedef_kisi_adi}' bulunamadı veya mesaj okunamadı.")
+                return
+            
+            uslup_ozeti, ornekler = uslup_profili_olustur(mesajlar)
+            basari_callback(hedef_kisi_adi, uslup_ozeti, ornekler, len(mesajlar))
+        except Exception as hata:
+            hata_callback(str(hata))
+            
+    # İşlemi arka planda başlatıyoruz
+    threading.Thread(target=gorev, daemon=True).start()
 
 def whatsapp_disa_aktarimini_oku(dosya_yolu, hedef_kisi_adi):
     mesajlar, su_anki_mesaj, su_anki_gonderen = [], None, None
