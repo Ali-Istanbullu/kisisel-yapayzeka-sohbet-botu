@@ -1,0 +1,5 @@
+{
+    "seviye": "Dusuk",
+    "model_dosya_adi": "qwen2.5-3b-instruct-q4_k_m.gguf",
+    "gpu_kullanimi": false
+}
