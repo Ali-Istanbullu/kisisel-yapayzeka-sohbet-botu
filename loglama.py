@@ -22,6 +22,7 @@ Kullanımı (SADECE bir except bloğunun İÇİNDEN çağrılmalı):
 """
 
 import logging
+from logging.handlers import RotatingFileHandler
 import os
 import sys
 from pathlib import Path
@@ -41,7 +42,14 @@ logger.setLevel(logging.DEBUG)
 
 # Modül birden fazla kez import edilse bile handler'ları ikiye katlamayalım
 if not logger.handlers:
-    dosya_handler = logging.FileHandler(LOG_DOSYA_YOLU, encoding="utf-8")
+    # STANDART FILEHANDLER YERİNE ROTATINGFILEHANDLER EKLENDİ
+    # 5MB sınırı dolunca yeni dosyaya geçer, en eskiyi silerek maksimum 2 yedek tutar.
+    dosya_handler = RotatingFileHandler(
+        LOG_DOSYA_YOLU, 
+        maxBytes=5 * 1024 * 1024, 
+        backupCount=2, 
+        encoding="utf-8"
+    )
     dosya_handler.setLevel(logging.DEBUG)
     dosya_handler.setFormatter(
         logging.Formatter("%(asctime)s [%(levelname)s] %(name)s: %(message)s")
