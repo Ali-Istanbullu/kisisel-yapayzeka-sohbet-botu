@@ -3,6 +3,7 @@ import sys
 from pathlib import Path
 from sqlalchemy import create_engine, Column, Integer, String, ForeignKey, text
 from sqlalchemy.orm import declarative_base, relationship, sessionmaker
+from loglama import hata_logla
 
 Base = declarative_base()
 
@@ -158,7 +159,7 @@ def veritabanini_kur():
                 _eski_karakterler_semasini_tasi(conn, session)
                 _eski_kullanici_semasini_tasi(conn, session)
                 _yeni_hafiza_sutununu_ekle(conn)
-        except Exception as e:
-            print(f"Veritabanı kurulum hatası: {e}")
+        except Exception:
+            hata_logla("veritabani kurulumu / migrasyon sırasında")
 
 veritabanini_kur()

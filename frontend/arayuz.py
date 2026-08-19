@@ -13,6 +13,7 @@ from database.veritabani_islemleri import (
 from backend.whatsapp_analiz import whatsapp_disa_aktarimini_oku, uslup_profili_olustur
 from backend.prompt_olusturucu import karakter_sistem_prompti_olustur, hatirlatma_ekli_mesaj_olustur
 from backend.motor import YapayZekaMotoru
+from loglama import hata_logla
 
 # WhatsApp Renk Paleti (Aydınlık Mod, Karanlık Mod)
 WA_ARKAPLAN = ("#efeae2", "#111b21")      
@@ -37,6 +38,9 @@ class YapayZekaUygulamasi(ctk.CTk):
         try:
             self.iconbitmap("ikon.ico")
         except:
+            # BİLİNÇLİ OLARAK sessiz: ikon dosyası .exe paketlenmeden önce
+            # her geliştirme ortamında olmayabilir, bu gerçek bir hata değil,
+            # sadece kozmetik bir eksiklik. Loglamaya değmez.
             pass
 
         self.aktif_frame = None
@@ -48,13 +52,31 @@ class YapayZekaUygulamasi(ctk.CTk):
         self.aktif_frame.pack(fill="both", expand=True)
 
     def baslangic_yonlendirmesi(self):
-        if not hasattr(self, 'yz_motoru'):
-            self.yz_motoru = YapayZekaMotoru() 
-            
+        # Eğer profil yoksa önce profil ekranına at, motoru yükleme
         if kullanici_profilini_getir() is None: 
             self.frame_degistir(ProfilOlusturmaEkrani)
-        else: 
+            return
+
+        # Profil varsa yükleme ekranı göster ve motoru arka planda başlat
+        if not hasattr(self, 'yz_motoru'):
+            self.yukleme_ekrani_goster()
+            threading.Thread(target=self.motoru_arkaplanda_baslat, daemon=True).start()
+        else:
             self.frame_degistir(AnaMenuEkrani)
+
+    def yukleme_ekrani_goster(self):
+        if self.aktif_frame is not None: self.aktif_frame.destroy()
+        self.aktif_frame = ctk.CTkFrame(self, fg_color=WA_ARKAPLAN)
+        self.aktif_frame.pack(fill="both", expand=True)
+        ctk.CTkLabel(self.aktif_frame, text="Yapay Zeka Motoru Isınıyor...\nLütfen Bekleyin (Bu işlem donanıma göre 10-20 sn sürebilir).", font=("Helvetica", 16, "bold"), text_color=WA_METIN).place(relx=0.5, rely=0.5, anchor="center")
+
+    def motoru_arkaplanda_baslat(self):
+        try:
+            self.yz_motoru = YapayZekaMotoru()
+            # Motor yüklenince ana menüye geç
+            self.after(0, lambda: self.frame_degistir(AnaMenuEkrani))
+        except Exception as hata:
+            self.after(0, lambda: ctk.CTkLabel(self.aktif_frame, text=f"Motor yüklenemedi!\nDetaylar hatalar.log dosyasında.", text_color="#ef697a").place(relx=0.5, rely=0.6, anchor="center"))
 
 class ProfilOlusturmaEkrani(ctk.CTkFrame):
     def __init__(self, master):
@@ -85,7 +107,7 @@ class ProfilOlusturmaEkrani(ctk.CTkFrame):
             self.uyari_label.configure(text="Lütfen tüm alanları doldurun!")
             return
         kullanici_profili_kaydet_veya_guncelle(ad_soyad, self._cinsiyet_isim_to_id[cinsiyet_isim])
-        self.master.frame_degistir(AnaMenuEkrani)
+        self.master.baslangic_yonlendirmesi()
 
 class AnaMenuEkrani(ctk.CTkFrame):
     def __init__(self, master):
@@ -253,8 +275,9 @@ class AnaMenuEkrani(ctk.CTkFrame):
     
 
     def bot_yaniti_bekle(self, kullanici_mesaji, hedef_karakter_id, taban_isim):
-        karakter = karakter_bilgisi_getir(hedef_karakter_id) 
         try:
+            karakter = karakter_bilgisi_getir(hedef_karakter_id)
+
             dinamik_prompt = karakter_sistem_prompti_olustur(karakter, self.kullanici)
             takviyeli_mesaj = hatirlatma_ekli_mesaj_olustur(karakter, self.kullanici, kullanici_mesaji)
             gecmis_mesajlar = mesaj_gecmisini_getir(hedef_karakter_id)[-10:]
@@ -270,16 +293,25 @@ class AnaMenuEkrani(ctk.CTkFrame):
                 dinamik_prompt, gecmis_mesajlar, takviyeli_mesaj,
                 siraya_girdi_callback=sira_bildir, uretim_basladi_callback=uretim_basladi
             )
-            mesaj_ekle(hedef_karakter_id, "Bot", bot_cevabi)
-            threading.Thread(target=self.master.yz_motoru.dinamik_hafiza_kontrolu, args=(hedef_karakter_id,), daemon=True).start()
+            # DİKKAT: Eski kodda mesaj_ekle ve dinamik_hafiza_kontrolu buradaydı. 
+            # Buradan sildik, çünkü adam sohbeti silmiş olabilir!
 
-        except Exception as hata:
+        except Exception:
+            from loglama import hata_logla
+            hata_logla(f"bot_yaniti_bekle (karakter_id={hedef_karakter_id})")
             bot_cevabi = "⚠️ Cevap üretilemedi, lütfen tekrar deneyin."
         finally:
             self._durum_guncelle(hedef_karakter_id, taban_isim, "")
 
+        # --- İŞTE SİHİRLİ KONTROL BURASI ---
+        # Sadece adam hala aynı sohbetin içindeyse veya sohbet silinmediyse çalışır:
         if getattr(self, "secili_karakter_id", None) == hedef_karakter_id:
+            # Önce mesajı veritabanına kaydet
+            mesaj_ekle(hedef_karakter_id, "Bot", bot_cevabi)
+            # Sonra ekrana balonu çizdir
             self.mesaj_alani.after(0, self.mesaj_balonu_ciz, bot_cevabi, "Bot")
+            # En son arkada hafıza kontrolünü tetikle
+            threading.Thread(target=self.master.yz_motoru.dinamik_hafiza_kontrolu, args=(hedef_karakter_id,), daemon=True).start()
 
     def yeni_karakter_ekle_popup(self):
         if hasattr(self, "popup") and self.popup is not None and self.popup.winfo_exists():
@@ -295,7 +327,7 @@ class AnaMenuEkrani(ctk.CTkFrame):
         # İKON SORUNU İÇİN GÜNCELLEME (Gecikmeli yükleme pencere açıldıktan sonra garanti eder)
         def ikon_yukle():
             try: self.popup.iconbitmap("ikon.ico")
-            except: pass
+            except: pass  # BİLİNÇLİ olarak sessiz - bkz. yukarıdaki ana pencere ikon notu
         self.popup.after(200, ikon_yukle)
 
         ctk.CTkLabel(self.popup, text="Karakter Adı:", font=("Helvetica", 13, "bold"), text_color=WA_METIN).pack(pady=(10, 2))

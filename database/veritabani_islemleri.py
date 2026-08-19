@@ -1,6 +1,7 @@
 from sqlalchemy.orm import sessionmaker, joinedload
 from database.veritabani import engine, Karakter, Mesaj, KullaniciAyarlari, RolTipi, CinsiyetTipi, WhatsappUslupProfili
 from datetime import datetime
+from loglama import hata_logla
 
 Session = sessionmaker(bind=engine)
 
@@ -18,12 +19,12 @@ def kullanici_profili_kaydet_veya_guncelle(ad_soyad, cinsiyet_id):
             kullanici = session.query(KullaniciAyarlari).first()
             if kullanici:
                 kullanici.ad_soyad, kullanici.cinsiyet_id = ad_soyad, cinsiyet_id
-            else: 
+            else:
                 session.add(KullaniciAyarlari(ad_soyad=ad_soyad, cinsiyet_id=cinsiyet_id))
             session.commit()
-        except Exception as e:
+        except Exception:
             session.rollback()
-            print(f"Hata (kullanici profili): {e}")
+            hata_logla("kullanici_profili_kaydet_veya_guncelle")
 
 def kullanici_profilini_getir():
     with Session() as session:
@@ -40,6 +41,7 @@ def karakter_ekle(isim, rol_id, cinsiyet_id, sistem_istemi, maksimum_karakter_si
             return True, "Başarılı", yeni_karakter.id
         except Exception as e:
             session.rollback()
+            hata_logla("karakter_ekle")
             return False, f"Hata oluştu: {e}", None
 
 def karakter_bilgisi_getir(karakter_id):
@@ -59,12 +61,12 @@ def whatsapp_profili_kaydet(karakter_id, kaynak_kisi_adi, uslup_ozeti, ornek_mes
             ornek_metni = "\n".join(ornek_mesajlar_listesi)
             if profil:
                 profil.kaynak_kisi_adi, profil.uslup_ozeti, profil.ornek_mesajlar = kaynak_kisi_adi, uslup_ozeti, ornek_metni
-            else: 
+            else:
                 session.add(WhatsappUslupProfili(karakter_id=karakter_id, kaynak_kisi_adi=kaynak_kisi_adi, uslup_ozeti=uslup_ozeti, ornek_mesajlar=ornek_metni))
             session.commit()
-        except Exception as e:
+        except Exception:
             session.rollback()
-            print(f"Hata (whatsapp profili): {e}")
+            hata_logla("whatsapp_profili_kaydet")
 
 def mesaj_ekle(karakter_id, gonderen, mesaj_metni):
     with Session() as session:
@@ -72,18 +74,18 @@ def mesaj_ekle(karakter_id, gonderen, mesaj_metni):
             tarih = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
             session.add(Mesaj(karakter_id=karakter_id, gonderen=gonderen, mesaj_metni=mesaj_metni, tarih=tarih))
             session.commit()
-        except Exception as e:
+        except Exception:
             session.rollback()
-            print(f"Hata (mesaj ekle): {e}")
+            hata_logla("mesaj_ekle")
 
 def mesajlari_sil(mesaj_id_listesi):
     with Session() as session:
         try:
             session.query(Mesaj).filter(Mesaj.id.in_(mesaj_id_listesi)).delete(synchronize_session=False)
             session.commit()
-        except Exception as e:
+        except Exception:
             session.rollback()
-            print(f"Hata (mesajları sil): {e}")
+            hata_logla("mesajlari_sil")
 
 def hafiza_guncelle(karakter_id, yeni_hafiza):
     with Session() as session:
@@ -92,9 +94,9 @@ def hafiza_guncelle(karakter_id, yeni_hafiza):
             if karakter:
                 karakter.uzun_donem_hafiza = yeni_hafiza
                 session.commit()
-        except Exception as e:
+        except Exception:
             session.rollback()
-            print(f"Hata (hafıza güncelle): {e}")
+            hata_logla("hafiza_guncelle")
 
 def mesaj_gecmisini_getir(karakter_id):
     with Session() as session:
@@ -107,6 +109,6 @@ def karakter_sil(karakter_id):
             session.query(WhatsappUslupProfili).filter_by(karakter_id=karakter_id).delete()
             session.query(Karakter).filter_by(id=karakter_id).delete()
             session.commit()
-        except Exception as e:
+        except Exception:
             session.rollback()
-            print(f"Hata (karakter sil): {e}")
+            hata_logla("karakter_sil")

@@ -1,6 +1,8 @@
 import re
 import threading
 
+from loglama import hata_logla
+
 _SATIR_DESENI = re.compile(r'^\[?(\d{1,2}[./]\d{1,2}[./]\d{2,4}),?\s+(\d{1,2}:\d{2}(?::\d{2})?)\s*(?:[AP]M)?\]?\s*[-–]?\s*([^:]+):\s?(.*)$')
 _SISTEM_ANAHTAR_KELIMELER = ("medya dahil edilmedi", "<media omitted>", "bu mesaj silindi", "güvenlik numarası değişti", "grup simgesini değiştirdi", "grubu oluşturdu")
 
@@ -18,6 +20,11 @@ def whatsapp_analizini_arkaplanda_baslat(dosya_yolu, hedef_kisi_adi, basari_call
             uslup_ozeti, ornekler = uslup_profili_olustur(mesajlar)
             basari_callback(hedef_kisi_adi, uslup_ozeti, ornekler, len(mesajlar))
         except Exception as hata:
+            # Kullanıcıya kısa mesaj (hata_callback) YETERLİ DEĞİL - dosya
+            # formatı beklenmedikse tam stack trace olmadan hangi satırın
+            # patladığını anlamak imkansız. Artık hem UI'a kısa mesaj gidiyor
+            # hem de kalıcı log dosyasına tam detay yazılıyor.
+            hata_logla(f"whatsapp_analizini_arkaplanda_baslat (dosya={dosya_yolu}, kisi={hedef_kisi_adi})")
             hata_callback(str(hata))
             
     # İşlemi arka planda başlatıyoruz
