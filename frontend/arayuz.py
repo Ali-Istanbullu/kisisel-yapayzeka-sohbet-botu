@@ -276,12 +276,7 @@ class AnaMenuEkrani(ctk.CTkFrame):
 
     def bot_yaniti_bekle(self, kullanici_mesaji, hedef_karakter_id, taban_isim):
         try:
-            karakter = karakter_bilgisi_getir(hedef_karakter_id)
-
-            dinamik_prompt = karakter_sistem_prompti_olustur(karakter, self.kullanici)
-            takviyeli_mesaj = hatirlatma_ekli_mesaj_olustur(karakter, self.kullanici, kullanici_mesaji)
-            gecmis_mesajlar = mesaj_gecmisini_getir(hedef_karakter_id)[-10:]
-
+            # Arayüz sadece durum bildirim fonksiyonlarını tanımlar
             def sira_bildir(sira_no):
                 if sira_no > 1: self._durum_guncelle(hedef_karakter_id, taban_isim, f" (Sırada: {sira_no}. sırada)")
                 else: self._durum_guncelle(hedef_karakter_id, taban_isim, " (Yazıyor...)")
@@ -289,12 +284,12 @@ class AnaMenuEkrani(ctk.CTkFrame):
             def uretim_basladi():
                 self._durum_guncelle(hedef_karakter_id, taban_isim, " (Yazıyor...)")
 
-            bot_cevabi = self.master.yz_motoru.yanit_uret_blok(
-                dinamik_prompt, gecmis_mesajlar, takviyeli_mesaj,
-                siraya_girdi_callback=sira_bildir, uretim_basladi_callback=uretim_basladi
+            # Arayüz tüm işi Motora (Backend'e) paslar ve sadece cevabı bekler!
+            bot_cevabi = self.master.yz_motoru.tam_sohbet_dongusu(
+                hedef_karakter_id, kullanici_mesaji, 
+                siraya_girdi_callback=sira_bildir, 
+                uretim_basladi_callback=uretim_basladi
             )
-            # DİKKAT: Eski kodda mesaj_ekle ve dinamik_hafiza_kontrolu buradaydı. 
-            # Buradan sildik, çünkü adam sohbeti silmiş olabilir!
 
         except Exception:
             from loglama import hata_logla
@@ -303,16 +298,9 @@ class AnaMenuEkrani(ctk.CTkFrame):
         finally:
             self._durum_guncelle(hedef_karakter_id, taban_isim, "")
 
-        # --- İŞTE SİHİRLİ KONTROL BURASI ---
-        # Sadece adam hala aynı sohbetin içindeyse veya sohbet silinmediyse çalışır:
+        # Arayüz sadece ekrana mesaj çizmeyi bilir
         if getattr(self, "secili_karakter_id", None) == hedef_karakter_id:
-            # Önce mesajı veritabanına kaydet
-            mesaj_ekle(hedef_karakter_id, "Bot", bot_cevabi)
-            # Sonra ekrana balonu çizdir
             self.mesaj_alani.after(0, self.mesaj_balonu_ciz, bot_cevabi, "Bot")
-            # En son arkada hafıza kontrolünü tetikle
-            threading.Thread(target=self.master.yz_motoru.dinamik_hafiza_kontrolu, args=(hedef_karakter_id,), daemon=True).start()
-
     def yeni_karakter_ekle_popup(self):
         if hasattr(self, "popup") and self.popup is not None and self.popup.winfo_exists():
             self.popup.focus()

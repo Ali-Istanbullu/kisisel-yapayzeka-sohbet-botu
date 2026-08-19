@@ -4,9 +4,36 @@ from llama_cpp import Llama
 from ayarlar import ayarlari_oku
 from database.veritabani_islemleri import mesaj_gecmisini_getir, karakter_bilgisi_getir, hafiza_guncelle, mesajlari_sil
 from loglama import hata_logla, bilgi_logla
-
+from backend.prompt_olusturucu import karakter_sistem_prompti_olustur, hatirlatma_ekli_mesaj_olustur
+from database.veritabani_islemleri import kullanici_profilini_getir, mesaj_ekle
 
 class YapayZekaMotoru:
+
+    def tam_sohbet_dongusu(self, karakter_id, kullanici_mesaji, siraya_girdi_callback=None, uretim_basladi_callback=None):
+        """Tüm veritabanı, prompt ve LLM üretim sürecini yöneten ana beyin."""
+        
+        # 1. Veritabanı İşlemleri (Arayüzden kurtardık!)
+        karakter = karakter_bilgisi_getir(karakter_id)
+        kullanici = kullanici_profilini_getir()
+        gecmis_mesajlar = mesaj_gecmisini_getir(karakter_id)[-10:]
+
+        # 2. Prompt (Sistem İstemi) Hazırlığı (Arayüzden kurtardık!)
+        dinamik_prompt = karakter_sistem_prompti_olustur(karakter, kullanici)
+        takviyeli_mesaj = hatirlatma_ekli_mesaj_olustur(karakter, kullanici, kullanici_mesaji)
+
+        # 3. LLM'e Soruyu Gönder
+        bot_cevabi = self.yanit_uret_blok(
+            dinamik_prompt, gecmis_mesajlar, takviyeli_mesaj,
+            siraya_girdi_callback, uretim_basladi_callback
+        )
+
+        # 4. Botun cevabını veritabanına kaydet (Arayüzden kurtardık!)
+        mesaj_ekle(karakter_id, "Bot", bot_cevabi)
+
+        # 5. Arka planda hafıza kontrolünü tetikle
+        threading.Thread(target=self.dinamik_hafiza_kontrolu, args=(karakter_id,), daemon=True).start()
+
+        return bot_cevabi
 
     def dinamik_hafiza_kontrolu(self, karakter_id):
         # Bu fonksiyon arayuz.py tarafından ayrı bir arka plan thread'inde,
