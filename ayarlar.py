@@ -1,16 +1,23 @@
 import json
 import os
 import glob
+import sys
+from pathlib import Path
 
-AYARLAR_DOSYASI = "ayarlar.json"
+# 1. AYAR DOSYASININ YERİ APPDATA OLMALI (Yazma izni duvarını aşmak için)
+if sys.platform.startswith("win"):
+    ayar_klasoru = Path(os.getenv("APPDATA", ".")) / "YapayZekaSohbetBotu"
+else:
+    ayar_klasoru = Path.home() / ".yapayzekasohbetbotu"
+
+ayar_klasoru.mkdir(parents=True, exist_ok=True)
+AYARLAR_DOSYASI = ayar_klasoru / "ayarlar.json"
 
 def ayarlari_oku():
-    # 1. GÜVENLİK AĞI: Dosya yoksa DİNAMİK olarak yarat!
+    # 2. GÜVENLİK AĞI: Dosya APPDATA'da yoksa dinamik olarak yarat!
     if not os.path.exists(AYARLAR_DOSYASI):
-        # Klasördeki .gguf uzantılı modeli otomatik bul
+        # Modeli exe'nin bulunduğu Program Files klasöründe (yanında) ara
         mevcut_modeller = glob.glob("*.gguf")
-        
-        # Eğer klasörde bir gguf dosyası bulursa onun adını al, bulamazsa boş bırak
         dinamik_model_adi = mevcut_modeller[0] if mevcut_modeller else ""
 
         varsayilan_ayarlar = {
@@ -21,11 +28,11 @@ def ayarlari_oku():
         with open(AYARLAR_DOSYASI, "w", encoding="utf-8") as f:
             json.dump(varsayilan_ayarlar, f, indent=4, ensure_ascii=False)
             
-    # 2. Dosyayı güvenle oku
+    # 3. Dosyayı güvenle oku
     with open(AYARLAR_DOSYASI, "r", encoding="utf-8") as f:
         ayarlar = json.load(f)
         
-    # 3. Model dosyası fiziksel olarak var mı kontrol et
+    # 4. Model dosyası fiziksel olarak exe'nin yanında var mı kontrol et
     model_dosyasi = ayarlar.get("model_dosya_adi", "")
     if not os.path.exists(model_dosyasi):
         raise FileNotFoundError(f"Kritik Hata: Ayarlar dosyası mevcut ancak '{model_dosyasi}' bulunamadı!\n\nModel dosyası silinmiş veya taşınmış olabilir. Lütfen programı yeniden kurun.")

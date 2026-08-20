@@ -69,9 +69,17 @@ class YapayZekaMotoru:
 
     def __init__(self):
         print("Motor ısınıyor, lütfen bekle...")
+        
+        # 1. BÖLÜM: Ayarları Okuma Aşaması (Yeni Dürüst Loglama)
         try:
             ayarlar = ayarlari_oku()
             model_yolu = f"./{ayarlar['model_dosya_adi']}"
+        except Exception:
+            hata_logla("Motor başlatılamadı: Ayarlar dosyası okunurken veya oluşturulurken hata çıktı!")
+            raise
+
+        # 2. BÖLÜM: Modeli RAM'e Yükleme Aşaması (Yeni Dürüst Loglama)
+        try:
             cekirdek_sayisi = max(1, os.cpu_count() - 1)
             n_gpu_layers = -1 if ayarlar.get("gpu_kullanimi", False) else 0
 
@@ -84,7 +92,7 @@ class YapayZekaMotoru:
             # YUTMUYORUZ, sadece loglayıp tekrar fırlatıyoruz (raise). Böylece
             # hem kalıcı log dosyasına yazılır hem de baslat.py'deki üst
             # seviye hata penceresi kullanıcıya gösterilmeye devam eder.
-            hata_logla("YapayZekaMotoru başlatılamadı (model yüklenemedi)")
+            hata_logla(f"Motor başlatılamadı: '{model_yolu}' modeli RAM'e yüklenirken çöktü!")
             raise
 
         self.kilit = threading.Lock()
